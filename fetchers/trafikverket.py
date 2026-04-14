@@ -1,4 +1,5 @@
 import requests
+import streamlit as st
 from datetime import datetime
 
 
@@ -14,9 +15,10 @@ SEVERITY_MAP = {
 
 def fetch_disruptions() -> list[dict]:
     """Hämtar aktiva trafikstörningar från Trafikverkets öppna API."""
-    query = """
+    api_key = st.secrets["trafikverket_key"]
+    query = f"""
     <REQUEST>
-        <LOGIN authenticationkey=""/>
+        <LOGIN authenticationkey="{api_key}"/>
         <QUERY objecttype="Situation" schemaversion="1.5" limit="50">
             <FILTER>
                 <EQ name="Deviation.ManagedCause" value="true"/>
