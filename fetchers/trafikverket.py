@@ -6,37 +6,32 @@ from datetime import datetime
 TRAFIKVERKET_URL = "https://api.trafikinfo.trafikverket.se/v2/data.json"
 
 SEVERITY_MAP = {
-    "Ingen påverkan": "Låg",
-    "Liten påverkan": "Låg",
-    "Stor påverkan": "Hög",
-    "Mycket stor påverkan": "Hög",
+    "Halt": "Hög",
+    "Mycket halt": "Hög",
+    "Isigt": "Hög",
+    "Snöigt": "Hög",
+    "Blött": "Måttlig",
+    "Fuktigt": "Måttlig",
+    "Vattenfilm": "Måttlig",
 }
 
 
 def fetch_disruptions() -> list[dict]:
-    """Hämtar aktiva trafikstörningar från Trafikverkets öppna API."""
+    """Hämtar problematiska väglagsrapporter från Trafikverkets öppna API."""
     api_key = st.secrets["trafikverket_key"]
-    query = f"""
-    <REQUEST>
+    query = f"""<REQUEST>
         <LOGIN authenticationkey="{api_key}"/>
-        <QUERY objecttype="Situation" schemaversion="1.5" limit="50">
+        <QUERY objecttype="RoadCondition" schemaversion="1" limit="100">
             <FILTER>
-                <EQ name="Deviation.ManagedCause" value="true"/>
+                <EQ name="Deleted" value="false"/>
             </FILTER>
-            <INCLUDE>Deviation.Header</INCLUDE>
-            <INCLUDE>Deviation.Message</INCLUDE>
-            <INCLUDE>Deviation.SeverityText</INCLUDE>
-            <INCLUDE>Deviation.StartTime</INCLUDE>
-            <INCLUDE>Deviation.Geometry.WGS84</INCLUDE>
-            <INCLUDE>Deviation.CountyNo</INCLUDE>
         </QUERY>
-    </REQUEST>
-    """
+    </REQUEST>"""
 
     response = requests.post(
         TRAFIKVERKET_URL,
-        data=query,
-        headers={"Content-Type": "text/xml"},
+        data=query.encode("utf-8"),
+        headers={"Content-Type": "text/xml; charset=utf-8"},
         timeout=10,
     )
     response.raise_for_status()
@@ -44,42 +39,46 @@ def fetch_disruptions() -> list[dict]:
     data = response.json()
     incidents = []
 
-    situations = data.get("RESPONSE", {}).get("RESULT", [{}])[0].get("Situation", [])
+    conditions = data.get("RESPONSE", {}).get("RESULT", [{}])[0].get("RoadCondition", [])
 
-    for situation in situations:
-        for deviation in situation.get("Deviation", []):
-            geometry = deviation.get("Geometry", {}).get("WGS84", "")
-            lat, lon = _parse_geometry(geometry)
+    for condition in conditions:
+        condition_text = condition.get("ConditionText", "Okänt väglag")
+        if condition_text == "Normalt":
+            continue
+        lat, lon = _parse_linestring(condition.get("Geometry", {}).get("WGS84", ""))
+        extra_info = ", ".join(condition.get("ConditionInfo", []))
 
-            incidents.append({
-                "source": "Trafikverket",
-                "title": deviation.get("Header", "Okänd störning"),
-                "description": deviation.get("Message", ""),
-                "severity": SEVERITY_MAP.get(deviation.get("SeverityText", ""), "Måttlig"),
-                "published": _parse_time(deviation.get("StartTime")),
-                "county": _county_name(deviation.get("CountyNo", [])),
-                "lat": lat,
-                "lon": lon,
-            })
+        incidents.append({
+            "source": "Trafikverket",
+            "title": f"Väglag: {condition_text} – {condition.get('RoadNumber', '')}",
+            "description": f"{condition.get('LocationText', '')}. {extra_info}".strip(". "),
+            "severity": SEVERITY_MAP.get(condition_text, "Måttlig"),
+            "published": _parse_time(condition.get("StartTime")),
+            "county": _county_name(condition.get("CountyNo", [])),
+            "lat": lat,
+            "lon": lon,
+        })
 
     return incidents
 
 
-def _parse_geometry(wgs84_string: str):
-    """Plockar ut lat/lon ur Trafikverkets WGS84-sträng, t.ex. 'POINT (18.07 59.33)'."""
+def _parse_linestring(wgs84_string: str):
+    """Plockar ut mittpunkten ur en WGS84 LINESTRING."""
     try:
-        coords = wgs84_string.replace("POINT (", "").replace(")", "").split()
-        return float(coords[1]), float(coords[0])
+        coords_str = wgs84_string.replace("LINESTRING (", "").replace(")", "")
+        pairs = [p.strip().split() for p in coords_str.split(",")]
+        mid = pairs[len(pairs) // 2]
+        return float(mid[1]), float(mid[0])
     except Exception:
         return None, None
 
 
 def _parse_time(time_string: str) -> str:
-    """Omvandlar Trafikverkets tidsformat till en läsbar sträng."""
+    """Omvandlar ISO-tidsstämpel till en läsbar sträng."""
     if not time_string:
         return ""
     try:
-        dt = datetime.fromisoformat(time_string.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(time_string)
         return dt.strftime("%Y-%m-%d %H:%M")
     except Exception:
         return time_string

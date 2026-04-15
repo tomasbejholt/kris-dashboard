@@ -2,6 +2,7 @@ from fetchers.smhi import fetch_warnings
 from fetchers.trafikverket import fetch_disruptions
 from fetchers.krisinformation import fetch_incidents
 from fetchers.polisen import fetch_events
+from pipeline.database import delete_old_incidents
 
 
 COUNTY_COORDINATES = {
@@ -37,6 +38,7 @@ def run_pipeline() -> list[dict]:
     Kör alla fetchers, normaliserar datan och returnerar
     en ren lista med incidents redo att sparas i Supabase.
     """
+    delete_old_incidents(days=30)
     raw = []
 
     for fetch_fn in [fetch_warnings, fetch_disruptions, fetch_incidents, fetch_events]:

@@ -2,13 +2,13 @@ import requests
 from datetime import datetime
 
 
-SMHI_WARNINGS_URL = "https://opendata-download-warnings.smhi.se/api/version/2/warnings.json"
+SMHI_WARNINGS_URL = "https://opendata-download-warnings.smhi.se/ibww/api/version/1/warning.json"
 
 SEVERITY_MAP = {
-    0: "Ingen",
-    1: "Låg",
-    2: "Måttlig",
-    3: "Hög",
+    "MESSAGE": "Låg",
+    "YELLOW": "Låg",
+    "ORANGE": "Måttlig",
+    "RED": "Hög",
 }
 
 
@@ -20,24 +20,41 @@ def fetch_warnings() -> list[dict]:
     data = response.json()
     incidents = []
 
-    for warning in data.get("warnings", []):
+    for warning in data:
+        title = warning.get("event", {}).get("sv") or warning.get("event", {}).get("en", "Okänd händelse")
         for area in warning.get("warningAreas", []):
+            lat, lon = _parse_polygon(area.get("area", {}).get("geometry", {}).get("coordinates", []))
             incidents.append({
                 "source": "SMHI",
-                "title": warning.get("event", {}).get("sv", "Okänd händelse"),
-                "description": area.get("description", {}).get("sv", ""),
-                "severity": SEVERITY_MAP.get(warning.get("warningLevel", 0), "Okänd"),
-                "published": _parse_time(warning.get("published")),
-                "county": area.get("areaName", {}).get("sv", "Okänt område"),
-                "lat": area.get("approximatedWgs84", {}).get("y"),
-                "lon": area.get("approximatedWgs84", {}).get("x"),
+                "title": title,
+                "description": area.get("eventDescription", {}).get("sv") or area.get("eventDescription", {}).get("en", ""),
+                "severity": SEVERITY_MAP.get(area.get("warningLevel", {}).get("code", ""), "Måttlig"),
+                "published": _parse_time(area.get("published")),
+                "county": area.get("areaName", {}).get("sv") or area.get("areaName", {}).get("en", "Okänt område"),
+                "lat": lat,
+                "lon": lon,
             })
 
     return incidents
 
 
-def _parse_time(timestamp_ms) -> str:
-    """Omvandlar en Unix-tidsstämpel i millisekunder till en läsbar sträng."""
-    if timestamp_ms is None:
+def _parse_polygon(coordinates: list):
+    """Beräknar centroid av en polygon för att få en representativ lat/lon."""
+    try:
+        ring = coordinates[0]
+        lons = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        return sum(lats) / len(lats), sum(lons) / len(lons)
+    except Exception:
+        return None, None
+
+
+def _parse_time(time_string: str) -> str:
+    """Omvandlar ISO-tidsstämpel till en läsbar sträng."""
+    if not time_string:
         return ""
-    return datetime.utcfromtimestamp(timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M")
+    try:
+        dt = datetime.fromisoformat(time_string.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return time_string

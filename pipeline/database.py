@@ -38,16 +38,20 @@ def save_incidents(incidents: list[dict]) -> int:
     return saved
 
 
-def fetch_all_incidents() -> list[dict]:
-    """Hämtar alla incidents från Supabase, sorterade med senaste först."""
+def delete_old_incidents(days: int = 30) -> int:
+    """Raderar incidents äldre än X dagar. Körs automatiskt vid varje pipeline-körning."""
+    from datetime import datetime, timedelta
+
+    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M")
+
     client = get_client()
     response = (
         client.table("incidents")
-        .select("*")
-        .order("published", desc=True)
+        .delete()
+        .lt("published", cutoff)
         .execute()
     )
-    return response.data
+    return len(response.data) if response.data else 0
 
 
 def fetch_recent_incidents(hours: int = 24) -> list[dict]:
