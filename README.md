@@ -10,13 +10,13 @@ The dashboard aggregates live data from four official Swedish sources, normalize
 - Swedish Police API — real-time incident reports by county
 - SMHI — active weather warnings with severity levels
 - Krisinformation.se (MSB) — official crisis communications
-- Trafikverket — road and rail disruptions
+- Trafikverket — real-time road condition reports (ice, slippery roads, etc.)
 
 **Features**
 - Interactive map with color-coded severity markers
 - Auto-generated situation summary ("lägesbild") — e.g. *"12 incidents recorded in the last 24 hours. 3 classified as severe. Most active area: Stockholms län."*
 - Anomaly detection model that flags unusual patterns in incident data
-- Filter by source, severity, and time window
+- Filter by source, severity, time window, and county
 - Cloud-backed storage with duplicate prevention
 
 ## Tech stack
