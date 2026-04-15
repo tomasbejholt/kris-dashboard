@@ -1,5 +1,7 @@
 # National Crisis & Incident Dashboard
 
+**Live demo:** [kris-dashboard.streamlit.app](https://kris-dashboard.streamlit.app)
+
 A real-time dashboard for monitoring crisis events, weather warnings, and traffic disruptions across Sweden. Built as a data engineering and machine learning project with direct relevance to civil defense and emergency management.
 
 ## What it does
